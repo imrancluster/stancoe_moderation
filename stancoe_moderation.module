@@ -1,0 +1,301 @@
+<?php
+
+/**
+ * @file
+ * stancoe_moderation.module
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function stancoe_moderation_theme() {
+    return array(
+        'contents_for_creator' => array(
+            'variables' => array(
+                'data' => null,
+            ),
+            'template'  => 'templates/contents-for-creator',
+        ),
+        'contents_for_manager' => array(
+            'variables' => array(
+                'data' => null,
+            ),
+            'template'  => 'templates/contents-for-manager',
+        ),
+        'assign_creators_form' => array(
+            'variables' => array(
+                'data' => null,
+            ),
+            'template'  => 'templates/assign-creators-form',
+        ),
+    );
+}
+
+/**
+ * Implements hook_permission().
+ */
+function stancoe_moderation_permission() {
+    return array(
+        'py content types'  => array(
+            'title'         => t('Py content types for manager'),
+            'description'   => t('Py content types for manager.'),
+        ),
+    );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function stancoe_moderation_menu(){
+    $items = array();
+
+    $items['admin/config/content/stancoe-content-types'] = array(
+        'title' => t('Content types for Manager'),
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('py_moderation_configuration'),
+        'access arguments' => array('py content types'),
+        'file' => 'stancoe_moderation_form.inc',
+    );
+
+    $items['user/%user/content-creators'] = array(
+        'title' => t('Assign Creators'),
+        'page callback' => 'assign_stancoe_content_creators',
+        'page arguments' => array(1),
+        'access arguments' => array('py content types'),
+        'file' => 'stancoe_moderation_form.inc',
+        'weight' => 10,
+        'type' => MENU_LOCAL_TASK,
+    );
+
+
+    return $items;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function stancoe_moderation_node_insert($node) {
+    global $user;
+    $roles = user_roles();
+
+    $managers = get_managers_for_stancoe_content_creator($user->uid);
+
+    if (in_array($roles[variable_get('py_role')], $user->roles)) {
+
+        foreach($managers as $manager) {
+            $load_manager = user_load($manager);
+
+            send_stancoe_content_notification($load_manager, $node);
+        }
+    }
+}
+
+/**
+ * @param $uid
+ * @return mixed
+ */
+function get_managers_for_stancoe_content_creator($uid) {
+    $query = db_select('stancoe_moderation_assign', 'pma');
+    $query->fields('pma', ['manager'])
+        ->condition('creators', $uid);
+    $restult = $query->execute()->fetchCol();
+
+    return $restult;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function stancoe_moderation_block_info() {
+
+    $blocks['stancoe_contents_for_creator'] = array(
+        'info' => t('For Stancoe Content Creator'),
+        'cache' => DRUPAL_NO_CACHE
+    );
+
+    $blocks['stancoe_contents_for_manager'] = array(
+        'info' => t('For Stancoe  Content Manager'),
+        'cache' => DRUPAL_NO_CACHE
+    );
+
+    return $blocks;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function stancoe_moderation_block_view($delta = '') {
+
+    $block = array();
+    switch ($delta) {
+        case 'stancoe_contents_for_creator':
+            $block['content'] = callback_for_stancoe_content_creator();
+            break;
+        case 'stancoe_contents_for_manager':
+            $block['content'] = callback_for_stancoe_content_manager();
+            break;
+    }
+    return $block;
+}
+
+/**
+ * @return string
+ * @throws Exception
+ */
+function callback_for_stancoe_content_creator() {
+    global $user;
+
+    // Get selected content types
+    $all_types = variable_get('py_content_types', 'article');
+    $content_types = array_filter(array_values($all_types));
+
+    $query = db_select('node', 'n');
+    $query->fields('n')
+        ->condition('uid', $user->uid)
+        ->condition('type', $content_types, 'IN');
+    $query->orderBy('nid', 'DESC');
+    $restult = $query->execute();
+
+    $data = [];
+    foreach ($restult as $node) {
+        $data[] = array(
+            'nid' => $node->nid,
+            'type' => $node->type,
+            'title' => $node->title,
+            'uid' => _user_name_by_uid($node->uid),
+            'status' => $node->status,
+            'created' => $node->created,
+            'changed' => $node->changed,
+        );
+    }
+
+    return theme( 'contents_for_creator', array('data' => $data));
+}
+
+/**
+ * @return string
+ * @throws Exception
+ */
+function callback_for_stancoe_content_manager() {
+
+    global $user;
+    $creators = get_stancoe_cretors_by_manager($user->uid);
+
+    // Get selected content types
+    $all_types = variable_get('py_content_types', 'article');
+    $content_types = array_filter(array_values($all_types));
+
+    $query = db_select('node', 'n');
+    $query->fields('n')
+        ->condition('uid', $creators, 'IN')
+        ->condition('type', $content_types, 'IN');
+    $query->orderBy('nid', 'DESC');
+    $restult = $query->execute();
+
+    $data = [];
+    foreach ($restult as $node) {
+        $data[] = array(
+            'nid' => $node->nid,
+            'type' => $node->type,
+            'title' => $node->title,
+            'uid' => stancoe_user_name_by_uid($node->uid),
+            'status' => $node->status,
+            'created' => $node->created,
+            'changed' => $node->changed,
+        );
+    }
+
+    return theme( 'contents_for_manager', array('data' => $data));
+}
+
+/**
+ * @param $uid
+ * @return string
+ */
+function stancoe_user_name_by_uid($uid) {
+    $query = db_select('users', 'u');
+    $query->fields('u', ['name'])
+        ->condition('uid', $uid);
+    $result = $query->execute()->fetchAssoc();
+
+    if ($result) {
+        return $result['name'];
+    }
+
+    return 'Not Found';
+}
+
+/**
+ * @param $manager
+ * @return array
+ */
+function get_stancoe_cretors_by_manager($manager) {
+    $query = db_select('stancoe_moderation_assign', 'pma');
+    $query->fields('pma', ['creators'])
+        ->condition('manager', $manager);
+    $restult = $query->execute()->fetchCol();
+
+    return $restult;
+}
+
+/**
+ * @param null $data
+ * @return bool
+ */
+function send_stancoe_content_notification($manager, $node) {
+    if(!empty($manager->email)) {
+        $from_email = variable_get('site_mail', 'feedback@example.com');
+        $to = $manager->email;
+
+        $message = "Hello " . $manager->name . ",
+
+A new content has been created from a content creator.
+
+Please go to your project to moderate the content.
+
+Regards
+Project Team\r\n";
+
+        $val = py_moderation_drupal_mail($from_email, $to , "New content has been created", $message);
+        return $val;
+    }
+
+    return false;
+}
+
+/**
+ * @param string $from
+ * @param $to
+ * @param $subject
+ * @param $message
+ * @return bool
+ */
+function stancoe_moderation_drupal_mail($from = 'default_from', $to, $subject, $message) {
+
+    $my_module = 'py_moderation';
+    $my_mail_token = microtime();
+    if ($from == 'default_from') {
+        $from = variable_get('site_mail', 'Py Moderation <imrancluster@gmail.com>');
+    }
+    $message = array(
+        'id' => $my_module . '_' . $my_mail_token,
+        'to' => $to,
+        'subject' => $subject,
+        'body' => array($message),
+        'headers' => array(
+            'From' => $from,
+            'Sender' => $from,
+            'Return-Path' => $from,
+            //'Bcc' => 'feedback@test.com',
+        ),
+    );
+
+    $system = drupal_mail_system($my_module, $my_mail_token);
+    $message = $system->format($message);
+    if ($system->mail($message)) {
+        return TRUE;
+    }
+    else {
+        return FALSE;
+    }
+}

@@ -1,0 +1,50 @@
+<?php
+/**
+ * @file
+ * stancoe_moderation.install
+ */
+
+/**
+ * Implements hook_shema()
+ */
+function stancoe_moderation_schema() {
+    $schema['stancoe_moderation_assign'] = array(
+      'description' => 'TODO: please describe this table!',
+      'fields' => array(
+        'id' => array(
+          'description' => 'TODO: please describe this field!',
+          'type' => 'serial',
+          'not null' => TRUE,
+        ),
+        'manager' => array(
+          'description' => 'TODO: please describe this field!',
+          'type' => 'varchar',
+          'length' => '15',
+          'not null' => TRUE,
+        ),
+        'creators' => array(
+          'description' => 'TODO: please describe this field!',
+          'type' => 'varchar',
+          'length' => '15',
+          'not null' => FALSE,
+        ),
+        'created' => array(
+          'description' => 'TODO: please describe this field!',
+          'type' => 'int',
+          'length' => '11',
+          'not null' => TRUE,
+        ),
+        'updated' => array(
+          'description' => 'TODO: please describe this field!',
+          'type' => 'int',
+          'length' => '11',
+          'not null' => TRUE,
+        ),
+      ),
+      'primary key' => array('id'),
+    );
+
+    return $schema;
+}
+
+?>

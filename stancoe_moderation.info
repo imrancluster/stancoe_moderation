@@ -1,0 +1,10 @@
+name = Stancoe Content Moderation
+description = Custom module to content moderation.
+core = 7.x
+package = Stancoe
+
+
+configure = admin/config/content/stancoe-content-types
+
+version = "7.x-1.0"
+core = "7.x"
